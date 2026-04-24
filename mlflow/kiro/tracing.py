@@ -304,14 +304,12 @@ def _create_tool_spans(
     if not tool_calls:
         return
 
-    per_tool_ns = total_duration_ns // len(tool_calls)
-    for idx, call in enumerate(tool_calls):
-        tool_start = start_ns + idx * per_tool_ns
+    for call in tool_calls:
         span = mlflow.start_span_no_context(
             name=f"tool_{call.get('name', 'unknown')}",
             parent_span=parent_span,
             span_type=SpanType.TOOL,
-            start_time_ns=tool_start,
+            start_time_ns=start_ns,
             inputs=call.get("input", {}),
             attributes={
                 "tool_name": call.get("name", "unknown"),
@@ -319,7 +317,7 @@ def _create_tool_spans(
             },
         )
         span.set_outputs({"result": call.get("result", "")})
-        span.end(end_time_ns=tool_start + per_tool_ns)
+        span.end(end_time_ns=start_ns)
 
 
 def _create_llm_span(
