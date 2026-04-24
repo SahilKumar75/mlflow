@@ -36,7 +36,7 @@ from mlflow.environment_variables import (
 KIRO_HOOKS_DIR = ".kiro/hooks"
 MLFLOW_HOOK_FILE = "mlflow_autolog.json"
 MLFLOW_HOOK_NAME = "MLflow Autolog"
-KIRO_HOOK_EVENT_AGENT_STOP = "AgentStop"
+KIRO_HOOK_EVENT_AGENT_STOP = "Stop"
 
 # Identifier used to recognise an existing MLflow hook command so we can
 # update it in-place rather than adding a duplicate.
