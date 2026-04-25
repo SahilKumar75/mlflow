@@ -210,13 +210,19 @@ def download_and_extract_protoc(version: Literal["3.19.4", "26.0"]) -> tuple[Pat
     Download and extract specific version protoc tool for Linux systems,
     return extracted protoc executable file path and include path.
     """
-    assert SYSTEM == "Linux", "This script only supports Linux systems."
-    assert MACHINE in ["x86_64", "aarch64"], (
-        "This script only supports x86_64 or aarch64 CPU architectures."
+    assert SYSTEM in ["Linux", "Darwin"], "This script only supports Linux or Mac systems."
+    assert MACHINE in ["x86_64", "aarch64", "arm64"], (
+        "This script only supports x86_64, aarch64, or arm64 CPU architectures."
     )
 
-    cpu_type = "x86_64" if MACHINE == "x86_64" else "aarch_64"
-    protoc_zip_filename = f"protoc-{version}-linux-{cpu_type}.zip"
+    if SYSTEM == "Linux":
+        cpu_type = "x86_64" if MACHINE == "x86_64" else "aarch_64"
+        protoc_zip_filename = f"protoc-{version}-linux-{cpu_type}.zip"
+    else:
+        cpu_type = "x86_64" if MACHINE == "x86_64" else "aarch_64"
+        if version == "3.19.4" and cpu_type == "aarch_64":
+            cpu_type = "x86_64"
+        protoc_zip_filename = f"protoc-{version}-osx-{cpu_type}.zip"
 
     downloaded_protoc_bin = CACHE_DIR / f"protoc-{version}" / "bin" / "protoc"
     downloaded_protoc_include_path = CACHE_DIR / f"protoc-{version}" / "include"

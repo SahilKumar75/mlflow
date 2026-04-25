@@ -1386,7 +1386,10 @@ def _delete_experiment():
     request_message = _get_request_message(
         DeleteExperiment(), schema={"experiment_id": [_assert_required, _assert_string]}
     )
-    _get_tracking_store().delete_experiment(request_message.experiment_id)
+    if request_message.hard_delete:
+        _get_tracking_store()._hard_delete_experiment(request_message.experiment_id)
+    else:
+        _get_tracking_store().delete_experiment(request_message.experiment_id)
     response_message = DeleteExperiment.Response()
     response = Response(mimetype="application/json")
     response.set_data(message_to_json(response_message))
@@ -1484,7 +1487,10 @@ def _delete_run():
     request_message = _get_request_message(
         DeleteRun(), schema={"run_id": [_assert_required, _assert_string]}
     )
-    _get_tracking_store().delete_run(request_message.run_id)
+    if request_message.hard_delete:
+        _get_tracking_store()._hard_delete_run(request_message.run_id)
+    else:
+        _get_tracking_store().delete_run(request_message.run_id)
     response_message = DeleteRun.Response()
     response = Response(mimetype="application/json")
     response.set_data(message_to_json(response_message))

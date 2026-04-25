@@ -313,6 +313,12 @@ class RestStore(WorkspaceRestStoreMixin, RestGatewayStoreMixin, AbstractStore):
         req_body = message_to_json(DeleteExperiment(experiment_id=str(experiment_id)))
         self._call_endpoint(DeleteExperiment, req_body)
 
+    def _hard_delete_experiment(self, experiment_id):
+        req_body = message_to_json(
+            DeleteExperiment(experiment_id=str(experiment_id), hard_delete=True)
+        )
+        self._call_endpoint(DeleteExperiment, req_body)
+
     def restore_experiment(self, experiment_id):
         req_body = message_to_json(RestoreExperiment(experiment_id=str(experiment_id)))
         self._call_endpoint(RestoreExperiment, req_body)
@@ -1108,6 +1114,10 @@ class RestStore(WorkspaceRestStoreMixin, RestGatewayStoreMixin, AbstractStore):
 
     def delete_run(self, run_id):
         req_body = message_to_json(DeleteRun(run_id=run_id))
+        self._call_endpoint(DeleteRun, req_body)
+
+    def _hard_delete_run(self, run_id):
+        req_body = message_to_json(DeleteRun(run_id=run_id, hard_delete=True))
         self._call_endpoint(DeleteRun, req_body)
 
     def restore_run(self, run_id):

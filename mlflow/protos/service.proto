@@ -2971,6 +2971,11 @@ message DeleteExperiment {
   // ID of the associated experiment.
   optional string experiment_id = 1 [(validate_required) = true];
 
+  // Whether to permanently delete the experiment and its associated metadata,
+  // runs, and tags. Soft-deleted experiments can be permanently deleted by
+  // setting this flag to true.
+  optional bool hard_delete = 2 [default = false];
+
   message Response {}
 }
 
@@ -3051,6 +3056,11 @@ message DeleteRun {
 
   // ID of the run to delete.
   optional string run_id = 1 [(validate_required) = true];
+
+  // Whether to permanently delete the run and its associated metadata,
+  // metrics, and tags. Soft-deleted runs can be permanently deleted by
+  // setting this flag to true.
+  optional bool hard_delete = 2 [default = false];
 
   message Response {}
 }
