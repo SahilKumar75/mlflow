@@ -351,10 +351,13 @@ def detach_span_from_context(token: contextvars.Token):
     Args:
         token: The token returned by `_set_span_to_active` function.
     """
-    if MLFLOW_USE_DEFAULT_TRACER_PROVIDER.get():
-        mlflow_runtime_context.detach(token)
-    else:
-        context_api.detach(token)
+    try:
+        if MLFLOW_USE_DEFAULT_TRACER_PROVIDER.get():
+            mlflow_runtime_context.detach(token)
+        else:
+            context_api.detach(token)
+    except ValueError:
+        pass
 
 
 def set_destination(destination: TraceLocationBase, *, context_local: bool = False):

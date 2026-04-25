@@ -82,11 +82,31 @@ def _tool_manager_uses_execute_tool_call() -> bool:
     must patch execute_tool_call to capture the TOOL span.
     """
     try:
-        from pydantic_ai._tool_manager import ToolManager
-
+        from pydantic_ai.tool_manager import ToolManager
         return hasattr(ToolManager, "execute_tool_call")
     except ImportError:
+        try:
+            from pydantic_ai._tool_manager import ToolManager
+        except ImportError:
+            return False
+
+        return hasattr(ToolManager, "execute_tool_call")
+    except Exception:
         return False
+
+
+def _get_tool_manager_class_path() -> str:
+    try:
+        from pydantic_ai.tool_manager import ToolManager
+
+        return "pydantic_ai.tool_manager.ToolManager"
+    except ImportError:
+        try:
+            from pydantic_ai._tool_manager import ToolManager
+
+            return "pydantic_ai._tool_manager.ToolManager"
+        except ImportError:
+            return "pydantic_ai._tool_manager.ToolManager"
 
 
 @autologging_integration(FLAVOR_NAME)
@@ -120,7 +140,7 @@ def autolog(log_traces: bool = True, disable: bool = False, silent: bool = False
         # In pydantic-ai >= 1.63.0, _agent_graph calls execute_tool_call directly,
         # bypassing handle_call. Patch execute_tool_call when available; fall back to
         # handle_call for older versions where execute_tool_call doesn't exist.
-        "pydantic_ai._tool_manager.ToolManager": ["execute_tool_call"]
+        _get_tool_manager_class_path(): ["execute_tool_call"]
         if _tool_manager_uses_execute_tool_call()
         else ["handle_call"],
         "pydantic_ai.mcp.MCPServer": ["call_tool", "list_tools"],
@@ -135,21 +155,34 @@ def autolog(log_traces: bool = True, disable: bool = False, silent: bool = False
     except ImportError:
         pass
 
-    # Patch Agent.__init__ to auto-enable instrument=True so LLM spans
-    # are captured without requiring users to explicitly set it
+    # Patch Agent.__init__ (or use instrument_all) to auto-enable instrument=True
+    # so LLM spans are captured without requiring users to explicitly set it
     try:
         from pydantic_ai import Agent
 
-        original_init = Agent.__init__
+        if hasattr(Agent, "instrument_all"):
+            if log_traces:
+                Agent.instrument_all(True)
 
-        @functools.wraps(original_init)
-        def patched_init(self, *args, **kwargs):
-            return patched_agent_init(original_init, self, *args, **kwargs)
+                from mlflow.utils.autologging_utils.safety import _AUTOLOGGING_CLEANUP_CALLBACKS
 
-        patch = _wrap_patch(Agent, "__init__", patched_init)
-        _store_patch(FLAVOR_NAME, patch)
+                def cleanup_instrumentation():
+                    Agent.instrument_all(False)
+
+                _AUTOLOGGING_CLEANUP_CALLBACKS.setdefault(FLAVOR_NAME, []).append(
+                    cleanup_instrumentation
+                )
+        else:
+            original_init = Agent.__init__
+
+            @functools.wraps(original_init)
+            def patched_init(self, *args, **kwargs):
+                return patched_agent_init(original_init, self, *args, **kwargs)
+
+            patch = _wrap_patch(Agent, "__init__", patched_init)
+            _store_patch(FLAVOR_NAME, patch)
     except (ImportError, AttributeError) as e:
-        _logger.error("Error patching Agent.__init__: %s", e)
+        _logger.error("Error patching Agent for instrumentation: %s", e)
 
     for cls_path, methods in class_map.items():
         module_name, class_name = cls_path.rsplit(".", 1)

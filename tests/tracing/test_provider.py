@@ -34,6 +34,7 @@ from mlflow.tracing.provider import (
     _get_tracer,
     _initialize_tracer_provider,
     _IsolatedRandomIdGenerator,
+    detach_span_from_context,
     is_tracing_enabled,
     start_span_in_context,
     trace_disabled,
@@ -385,6 +386,28 @@ def test_disable_enable_tracing_not_mutate_otel_provider(monkeypatch):
 
     test_fn()
     assert trace.get_tracer_provider() is otel_tracer_provider
+
+
+@pytest.mark.parametrize(
+    ("use_default_provider", "detach_target"),
+    [
+        (True, "mlflow.tracing.provider.mlflow_runtime_context.detach"),
+        (False, "mlflow.tracing.provider.context_api.detach"),
+    ],
+)
+def test_detach_span_from_context_ignores_cross_context_value_error(
+    monkeypatch, use_default_provider, detach_target
+):
+    monkeypatch.setenv(
+        MLFLOW_USE_DEFAULT_TRACER_PROVIDER.name,
+        str(use_default_provider).lower(),
+    )
+
+    with mock.patch(
+        detach_target,
+        side_effect=ValueError("token was created in a different Context"),
+    ):
+        detach_span_from_context(mock.sentinel.token)
 
 
 def test_is_tracing_enabled():
