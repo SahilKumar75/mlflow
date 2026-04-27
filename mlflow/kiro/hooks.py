@@ -1,10 +1,9 @@
 """Hook handler for the Kiro CLI integration with MLflow."""
 
 import json
+import os
 import sys
-from pathlib import Path
 
-from mlflow.kiro.config import KIRO_ENV_FILE, KIRO_HOOKS_DIR
 from mlflow.kiro.tracing import (
     KIRO_TRACING_LEVEL,
     get_hook_response,
@@ -22,12 +21,15 @@ def stop_hook_handler() -> None:
     Reads the session JSON from stdin, creates an MLflow trace, and writes the
     Kiro hook response to stdout.
     """
-    if not is_tracing_enabled():
-        print(json.dumps(get_hook_response()))  # noqa: T201
-        return
-
     try:
         session_data = read_hook_input()
+        if cwd := session_data.get("cwd"):
+            os.chdir(cwd)
+
+        if not is_tracing_enabled():
+            print(json.dumps(get_hook_response()))  # noqa: T201
+            return
+
         session_id = session_data.get("session_id", "<unknown>")
 
         setup_mlflow()
