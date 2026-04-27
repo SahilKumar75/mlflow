@@ -47,6 +47,7 @@ from mlflow.environment_variables import (
     _MLFLOW_SGI_NAME,
     MLFLOW_ENABLE_WORKSPACES,
     MLFLOW_FLASK_SERVER_SECRET_KEY,
+    MLFLOW_RBAC_SEED_DEFAULT_ROLES,
     MLFLOW_SERVER_ENABLE_GRAPHQL_AUTH,
 )
 from mlflow.protos.databricks_pb2 import (
@@ -179,8 +180,10 @@ from mlflow.server.auth.config import DEFAULT_AUTHORIZATION_FUNCTION, read_auth_
 from mlflow.server.auth.entities import User
 from mlflow.server.auth.logo import MLFLOW_LOGO
 from mlflow.server.auth.permissions import (
+    EDIT,
     MANAGE,
     NO_PERMISSIONS,
+    READ,
     Permission,
     get_permission,
     max_permission,
@@ -2521,6 +2524,80 @@ def filter_list_workspaces(resp: Response) -> None:
     resp.data = message_to_json(response_message)
 
 
+# Default roles seeded into every new workspace when
+# ``MLFLOW_RBAC_SEED_DEFAULT_ROLES`` is on. ``CreateWorkspace`` is gated to
+# ``sender_is_admin``, so the creator is always a super-admin whose ``is_admin``
+# flag already bypasses RBAC checks — we therefore don't assign the creator to
+# any of these roles. The three roles exist as ready-made scaffolding for the
+# admin to hand out to other users.
+#
+# All three roles use ``(resource_type='workspace', resource_pattern='*')`` — the
+# workspace-wide grant form supported by ``VALID_RESOURCE_TYPES``. The permission
+# level differentiates them: only ``MANAGE`` additionally grants workspace-admin
+# capability (role/user management within the workspace); ``EDIT`` / ``READ`` give
+# workspace-wide resource access without admin authority.
+_DEFAULT_WORKSPACE_ROLES = (
+    ("workspace-admin", MANAGE.name, "Full MANAGE authority over the workspace."),
+    ("editor", EDIT.name, "EDIT access to every resource in the workspace."),
+    ("viewer", READ.name, "READ access to every resource in the workspace."),
+)
+
+
+def _seed_default_workspace_roles(resp: Response) -> None:
+    """After a successful ``CreateWorkspace``, seed default RBAC roles into the new
+    workspace. Partial failures are logged rather than raised — the workspace
+    creation has already succeeded at this point.
+
+    No creator-assignment logic: the ``before_request`` handler gates
+    ``CreateWorkspace`` to super-admins (via ``sender_is_admin``), and super-admins
+    already bypass RBAC checks via their ``is_admin`` flag. The seeded roles are
+    therefore a convenience for the admin to hand out to other users, not
+    something the creator needs assigned to themselves.
+    """
+    if not MLFLOW_RBAC_SEED_DEFAULT_ROLES.get():
+        return
+
+    response_message = CreateWorkspace.Response()
+    parse_dict(resp.json, response_message)
+    workspace_name = response_message.workspace.name
+
+    for role_name, permission, description in _DEFAULT_WORKSPACE_ROLES:
+        try:
+            role = store.create_role(
+                name=role_name, workspace=workspace_name, description=description
+            )
+        except MlflowException as e:
+            _logger.error(
+                "Failed to create default role '%s' for workspace '%s': %s",
+                role_name,
+                workspace_name,
+                e,
+            )
+            continue
+        try:
+            store.add_role_permission(role.id, "workspace", "*", permission)
+        except MlflowException as e:
+            _logger.error(
+                "Failed to add permission to default role '%s' for workspace '%s': %s. "
+                "Rolling back the orphan role.",
+                role_name,
+                workspace_name,
+                e,
+            )
+            # Remove the orphan role so the workspace doesn't end up with a named
+            # role that grants nothing. Best-effort: log on failure.
+            try:
+                store.delete_role(role.id)
+            except MlflowException as delete_err:
+                _logger.error(
+                    "Failed to roll back orphan role '%s' (id=%s) for workspace '%s': %s",
+                    role_name,
+                    role.id,
+                    workspace_name,
+                    delete_err,
+                )
+
+
 def _cleanup_workspace_permissions(resp: Response) -> None:
     # This handler runs only on successful DELETE responses. Cleanup failures are logged
     # instead of raised because the workspace deletion has already succeeded at this point.
@@ -2845,6 +2922,7 @@ AFTER_REQUEST_PATH_HANDLERS = {
     CreateGatewayModelDefinition: set_can_manage_gateway_model_definition_permission,
     DeleteGatewayModelDefinition: delete_gateway_model_definition_permissions_cascade,
     ListWorkspaces: filter_list_workspaces,
+    CreateWorkspace: _seed_default_workspace_roles,
     DeleteWorkspace: _cleanup_workspace_permissions,
 }
 
@@ -3585,9 +3663,7 @@ def _validate_gateway_use_permission(endpoint_name: str, username: str) -> bool:
     # TODO: we need to query endpoint ID by name from the database.
     # Revisit the mutability of the endpoint name if it causes latency issues.
     try:
-        from mlflow.tracking._tracking_service.utils import _get_store
-
-        tracking_store = _get_store()
+        tracking_store = _get_tracking_store()
         endpoint = tracking_store.get_gateway_endpoint(name=endpoint_name)
         endpoint_id = endpoint.endpoint_id
 
@@ -3595,6 +3671,16 @@ def _validate_gateway_use_permission(endpoint_name: str, username: str) -> bool:
             lambda: store.get_gateway_endpoint_permission(endpoint_id, username).permission,
             workspace_level_permission_func=lambda: _workspace_permission_for_gateway_endpoint(
                 username, endpoint_id
+            ),
+            role_permission_func=_role_permission_for(
+                username=username,
+                resource_type="gateway_endpoint",
+                resource_key=endpoint_id,
+                workspace_lookup_id=endpoint_id,
+                workspace_fetcher=lambda eid: _get_tracking_store().get_gateway_endpoint(
+                    endpoint_id=eid
+                ),
+                workspace_label="gateway endpoint",
             ),
         )
         return permission.can_use
