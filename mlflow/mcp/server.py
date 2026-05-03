@@ -18,11 +18,11 @@ from mlflow.mcp.decorator import get_mcp_tool_name
 
 # Environment variable to control which tool categories are enabled
 # Supported values:
-#   - "genai": traces, scorers, experiments, and runs tools (default)
-#   - "ml": experiments, runs, models and deployments tools
+#   - "genai": traces, scorers, experiments, runs, and artifacts tools (default)
+#   - "ml": experiments, runs, models, deployments, and artifacts tools
 #   - "all": all available tools
-#   - Comma-separated list: "traces,scorers,experiments,runs,models,deployments"
-MLFLOW_MCP_TOOLS = os.environ.get("MLFLOW_MCP_TOOLS", "genai")
+#   - Comma-separated list: "traces,scorers,experiments,runs,models,deployments,artifacts"
+MLFLOW_MCP_TOOLS = os.environ.get("MLFLOW_MCP_TOOLS", "genai")  # includes artifacts tools
 
 # Tool category mappings
 _GENAI_TOOLS = {"traces", "scorers", "experiments", "runs", "artifacts"}

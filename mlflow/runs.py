@@ -353,7 +353,7 @@ def search_runs(
     Search for runs matching specified criteria across experiments.
 
     Returns a JSON array of runs with their parameters, metrics, and metadata.
-    Supports filtering, ordering, and pagination.
+    Supports filtering and ordering.
     """
     try:
         client = MlflowClient()
@@ -366,13 +366,16 @@ def search_runs(
         # Convert order_by tuple to list
         order_by_list = list(order_by) if order_by else None
 
+        # Convert view_type string to ViewType enum
+        view_type_enum = ViewType.from_string(view_type.upper())
+
         # Search runs
         runs = client.search_runs(
             experiment_ids=exp_ids,
             filter_string=filter_string,
             order_by=order_by_list,
             max_results=max_results,
-            run_view_type=view_type.upper(),
+            run_view_type=view_type_enum,
         )
 
         # Convert runs to JSON-serializable format
