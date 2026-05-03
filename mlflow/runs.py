@@ -367,7 +367,7 @@ def search_runs(
         order_by_list = list(order_by) if order_by else None
 
         # Convert view_type string to ViewType enum
-        view_type_enum = ViewType.from_string(view_type.upper())
+        view_type_enum = ViewType.from_string(view_type.lower())
 
         # Search runs
         runs = client.search_runs(
